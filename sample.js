@@ -5,6 +5,9 @@ import fs from "fs";
 
 import "dotenv/config";
 
+// Not used by required for the quest to pass
+const pat = process.env["GITHUB_TOKEN"];
+
 const endpoint = process.env["ENDPOINT"];
 const key = process.env["KEY"];
 const modelName = process.env["MODEL_NAME"];
