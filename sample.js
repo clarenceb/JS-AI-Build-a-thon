@@ -1,28 +1,41 @@
 import ModelClient, { isUnexpected } from "@azure-rest/ai-inference";
+import { DefaultAzureCredential } from "@azure/identity";
 import { AzureKeyCredential } from "@azure/core-auth";
+import fs from "fs";
 
-const token = process.env["GITHUB_TOKEN"];
-const endpoint = "https://models.github.ai/inference";
-const modelName = "meta/Llama-3.2-11B-Vision-Instruct";
+import "dotenv/config";
+
+const endpoint = process.env["ENDPOINT"];
+const key = process.env["KEY"];
+const modelName = process.env["MODEL_NAME"];
+const imageFilePath = "./contoso_layout_sketch.jpg"
+const imageFormat = "jpeg";
 
 export async function main() {
-
-  const client = ModelClient(
-    endpoint,
-    new AzureKeyCredential(token),
-  );
+  const client = createModelClient(endpoint, key);
 
   const response = await client.path("/chat/completions").post({
     body: {
       messages: [
-        { role:"system", content: "You are a helpful assistant." },
-        { role:"user", content: "What is the capital of France?" }
+        {
+          role: "system",
+          content: "You are a helpful assistant that describes images in details.",
+        },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Write HTML and CSS code for a web page based on the following hand-drawn sketch." },
+            {
+              type: "image_url",
+              image_url: {
+                url: getImageDataUrl(imageFilePath, imageFormat),
+              },
+            },
+          ],
+        },
       ],
-      temperature: 1.0,
-      top_p: 1.0,
-      max_tokens: 1000,
-      model: modelName
-    }
+      model: modelName,
+    },
   });
 
   if (isUnexpected(response)) {
@@ -35,3 +48,34 @@ export async function main() {
 main().catch((err) => {
   console.error("The sample encountered an error:", err);
 });
+
+function createModelClient(endpoint, key) {
+  // auth scope for AOAI resources is currently https://cognitiveservices.azure.com/.default
+  // auth scope for MaaS and MaaP is currently https://ml.azure.com
+  // (Do not use for Serverless API or Managed Computer Endpoints)
+  if (key) {
+    return ModelClient(endpoint, new AzureKeyCredential(key));
+  } else {
+    const scopes = [];
+    if (endpoint.includes(".models.ai.azure.com")) {
+      scopes.push("https://ml.azure.com");
+    } else if (endpoint.includes(".openai.azure.com/openai/deployments/")) {
+      scopes.push("https://cognitiveservices.azure.com");
+    }
+
+    const clientOptions = { credentials: { scopes } };
+    return ModelClient(endpoint, new DefaultAzureCredential(), clientOptions);
+  }
+}
+
+function getImageDataUrl(imageFile, imageFormatType) {
+  try {
+    const imageBuffer = fs.readFileSync(imageFile);
+    const imageBase64 = imageBuffer.toString("base64");
+    return `data:image/${imageFormatType};base64,${imageBase64}`;
+  } catch (error) {
+    console.error(`Could not read '${imageFile}'.`);
+    console.error("Set the correct path to the image file before running this sample.");
+    process.exit(1);
+  }
+}
